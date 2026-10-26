@@ -148,7 +148,7 @@
     const DEPOT = "baptiste49lebreton-afk/recettes-site";
 
     const CATEGORIES = {
-      "Dessert":   { emoji: "🍰", mots: ["gâteau", "gateau", "tarte", "chocolat", "cookie", "crème", "creme", "sucre", "brownie", "muffin", "crêpe", "crepe", "flan", "glace", "dessert", "pâte à tartiner", "caramel"] },
+      "Dessert":   { emoji: "🍰", mots: ["gâteau", "gateau", "tarte", "chocolat", "cookie", "brownie", "muffin", "crêpe", "crepe", "flan", "glace", "dessert", "pâte à tartiner", "caramel", "cheesecake", "tiramisu"] },
       "Petit-déj": { emoji: "🥞", mots: ["pancake", "porridge", "granola", "petit-déj", "petit déj", "brunch", "gaufre", "tartine"] },
       "Apéro":     { emoji: "🧀", mots: ["apéro", "apero", "dip", "houmous", "tapas", "feuilleté", "bouchée", "chips"] },
       "Boisson":   { emoji: "🥤", mots: ["smoothie", "cocktail", "limonade", "boisson", "thé glacé", "milkshake", "jus"] },
@@ -164,11 +164,19 @@
     }
 
     function deviner(texte) {
+      const lignes = texte.split("\n").filter(l => l.trim());
+      const titre = (lignes[0] || "").toLowerCase();
       const t = texte.toLowerCase();
+      let meilleur = "Plat", max = 0;
       for (const [nom, def] of Object.entries(CATEGORIES)) {
-        if (def.mots.some(m => t.includes(m))) return nom;
+        let score = 0;
+        for (const m of def.mots) {
+          if (titre.includes(m)) score += 3;
+          else if (t.includes(m)) score += 1;
+        }
+        if (score > max) { max = score; meilleur = nom; }
       }
-      return "Plat";
+      return max >= 2 ? meilleur : "Plat";
     }
 
     // Une ligne ressemble à un ingrédient : tiret/puce, ou quantité (200 g, 2 oeufs, 1 c. à soupe...)
@@ -244,7 +252,7 @@
         card.className = "card";
         const meta = [r.temps, r.portions, r.ingredients.length ? r.ingredients.length + " ingrédients" : ""].filter(Boolean).join(" · ");
         card.innerHTML =
-          '<div class="vignette">' + CATEGORIES[r.categorie].emoji + '</div>' +
+          '<div class="vignette"' + (r.image ? ' style="background:url(' + r.image + ') center/cover"' : '') + '>' + (r.image ? '' : CATEGORIES[r.categorie].emoji) + '</div>' +
           '<div class="corps"><div class="cat">' + echapper(r.categorie) + '</div>' +
           '<h2>' + echapper(r.titre) + '</h2>' +
           (meta ? '<div class="meta">' + echapper(meta) + '</div>' : '') + '</div>';
@@ -271,13 +279,15 @@
       try {
         const liste = await fetch("https://api.github.com/repos/" + DEPOT + "/contents/recettes").then(r => r.json());
         const fichiers = liste.filter(f => /^\d+\.txt$/.test(f.name));
+        const images = {};
+        for (const f of liste) { const m = f.name.match(/^(\d+)\.(jpe?g|png)$/i); if (m) images[m[1]] = f.download_url; }
         const toutes = await Promise.all(fichiers.map(async f => {
           const texte = await fetch(f.download_url).then(r => r.text());
-          return { texte, nom: f.name };
+          return { texte, nom: f.name, image: images[f.name.replace(".txt","")] || "" };
         }));
         recettes = toutes
           .filter(t => t.texte.trim() && !t.texte.trim().startsWith("/"))
-          .map(t => analyser(t.texte, t.nom))
+          .map(t => Object.assign(analyser(t.texte, t.nom), { image: t.image }))
           .sort((a, b) => b.id - a.id);
       } catch (e) {
         recettes = [];
