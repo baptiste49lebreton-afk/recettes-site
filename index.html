@@ -6,109 +6,289 @@
   <title>Mes recettes</title>
   <style>
     :root {
-      --bg: #1b1b2f;
-      --card: #252540;
-      --text: #f2f2f7;
-      --muted: #a9a9c4;
-      --accent: #ff7a59;
+      --bg: #fff8ee;
+      --card: #ffffff;
+      --text: #3b2f2a;
+      --muted: #8a7b72;
+      --accent: #e4572e;
+      --accent-soft: #fde7dd;
+      --green: #6a994e;
+      --radius: 18px;
+      --shadow: 0 6px 20px rgba(120, 80, 50, 0.12);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
-      padding: 16px;
     }
-    h1 { margin: 8px 0 16px; font-size: 1.8rem; }
+    header {
+      text-align: center;
+      padding: 36px 16px 20px;
+      background: linear-gradient(180deg, #ffe9d2 0%, var(--bg) 100%);
+    }
+    header h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 2.4rem;
+      letter-spacing: 0.01em;
+    }
+    header p { margin: 6px 0 18px; color: var(--muted); }
     #recherche {
       width: 100%;
-      max-width: 420px;
-      padding: 10px 14px;
+      max-width: 440px;
+      padding: 12px 18px;
       border-radius: 999px;
-      border: 1px solid var(--muted);
-      background: var(--card);
-      color: var(--text);
+      border: 2px solid transparent;
+      background: #fff;
+      box-shadow: var(--shadow);
       font-size: 1rem;
-      margin-bottom: 20px;
+      color: var(--text);
+      outline: none;
     }
-    .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+    #recherche:focus { border-color: var(--accent); }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+    .filters button {
+      background: #fff;
+      color: var(--text);
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 0.92rem;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(120, 80, 50, 0.1);
+    }
+    .filters button.active { background: var(--accent); color: #fff; }
+    main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 48px; }
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
     .card {
       background: var(--card);
-      border-radius: 14px;
-      padding: 14px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.15s ease;
       display: flex;
       flex-direction: column;
-      gap: 8px;
     }
-    .card h2 { font-size: 1.05rem; margin: 0; }
-    .card p { color: var(--muted); margin: 0; font-size: 0.95rem; white-space: pre-line; }
-    .card a { color: var(--accent); text-decoration: none; font-weight: 600; margin-top: auto; }
-    .empty { color: var(--muted); }
+    .card:hover { transform: translateY(-4px); }
+    .vignette {
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3.2rem;
+      background: var(--accent-soft);
+    }
+    .card .corps { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+    .card .cat { color: var(--accent); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+    .card h2 { margin: 0; font-family: Georgia, serif; font-size: 1.2rem; }
+    .card .meta { color: var(--muted); font-size: 0.9rem; }
+    .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+    /* Fenêtre de détail */
+    dialog {
+      border: none;
+      border-radius: var(--radius);
+      padding: 0;
+      max-width: 640px;
+      width: calc(100% - 24px);
+      max-height: 90vh;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      color: var(--text);
+      background: var(--card);
+    }
+    dialog::backdrop { background: rgba(59, 47, 42, 0.55); }
+    .detail-tete { background: var(--accent-soft); padding: 22px 22px 16px; position: relative; }
+    .detail-tete .cat { color: var(--accent); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+    .detail-tete h2 { margin: 4px 0 4px; font-family: Georgia, serif; font-size: 1.6rem; }
+    .detail-tete .meta { color: var(--muted); }
+    .fermer {
+      position: absolute; top: 12px; right: 14px;
+      background: #fff; border: none; border-radius: 50%;
+      width: 34px; height: 34px; font-size: 1.1rem; cursor: pointer;
+    }
+    .detail-corps { padding: 18px 22px 24px; overflow-y: auto; max-height: calc(90vh - 130px); }
+    .detail-corps h3 { font-family: Georgia, serif; margin: 18px 0 8px; color: var(--accent); }
+    .detail-corps ul, .detail-corps ol { margin: 0; padding-left: 22px; line-height: 1.7; }
+    .detail-corps p { line-height: 1.6; white-space: pre-line; }
+    .voir {
+      display: inline-block; margin-top: 16px;
+      background: var(--accent); color: #fff;
+      text-decoration: none; padding: 10px 18px; border-radius: 999px; font-weight: 600;
+    }
   </style>
 </head>
 <body>
-  <h1>Mes recettes</h1>
-  <input id="recherche" type="search" placeholder="Rechercher une recette...">
-  <div class="grid" id="grid"></div>
-  <p class="empty" id="empty" hidden>Aucune recette pour l'instant.</p>
+  <header>
+    <h1>Mes recettes</h1>
+    <p>Toutes mes trouvailles gourmandes au même endroit</p>
+    <input id="recherche" type="search" placeholder="Rechercher une recette ou un ingrédient...">
+    <div class="filters" id="filters"></div>
+  </header>
+
+  <main>
+    <div class="grid" id="grid"></div>
+    <p class="empty" id="empty" hidden>Aucune recette pour l'instant. Envoie-en une au bot Telegram !</p>
+  </main>
+
+  <dialog id="detail">
+    <div class="detail-tete">
+      <button class="fermer" id="fermer" aria-label="Fermer">✕</button>
+      <div class="cat" id="d-cat"></div>
+      <h2 id="d-titre"></h2>
+      <div class="meta" id="d-meta"></div>
+    </div>
+    <div class="detail-corps" id="d-corps"></div>
+  </dialog>
 
   <script>
     // Dépôt GitHub où le bot ajoute les recettes (dossier "recettes")
     const DEPOT = "baptiste49lebreton-afk/recettes-site";
+
+    const CATEGORIES = {
+      "Dessert":   { emoji: "🍰", mots: ["gâteau", "gateau", "tarte", "chocolat", "cookie", "crème", "creme", "sucre", "brownie", "muffin", "crêpe", "crepe", "flan", "glace", "dessert", "pâte à tartiner", "caramel"] },
+      "Petit-déj": { emoji: "🥞", mots: ["pancake", "porridge", "granola", "petit-déj", "petit déj", "brunch", "gaufre", "tartine"] },
+      "Apéro":     { emoji: "🧀", mots: ["apéro", "apero", "dip", "houmous", "tapas", "feuilleté", "bouchée", "chips"] },
+      "Boisson":   { emoji: "🥤", mots: ["smoothie", "cocktail", "limonade", "boisson", "thé glacé", "milkshake", "jus"] },
+      "Salade":    { emoji: "🥗", mots: ["salade", "bowl", "crudités"] },
+      "Plat":      { emoji: "🍝", mots: [] }
+    };
+
     let recettes = [];
+    let categorieActive = "Toutes";
 
     function echapper(t) {
-      return t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      return String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function deviner(texte) {
+      const t = texte.toLowerCase();
+      for (const [nom, def] of Object.entries(CATEGORIES)) {
+        if (def.mots.some(m => t.includes(m))) return nom;
+      }
+      return "Plat";
+    }
+
+    // Une ligne ressemble à un ingrédient : tiret/puce, ou quantité (200 g, 2 oeufs, 1 c. à soupe...)
+    function estIngredient(l) {
+      return /^[-•*–·✅🔸▪]/u.test(l) ||
+        /^\d+([.,/]\d+)?\s*(g|kg|ml|cl|l|c\.|cuill|oeuf|œuf|pincée|gousse|tranche|sachet|verre|pot)/i.test(l);
+    }
+    function estEtape(l) {
+      return /^(\d+\s*[.)\-:]|étape|etape|step)/i.test(l);
+    }
+    function nettoyer(l) {
+      return l.replace(/^[-•*–·✅🔸▪]+\s*/u, "").replace(/^(\d+\s*[.)\-:]|étape\s*\d*\s*[:.\-]?)\s*/i, "").trim();
     }
 
     function analyser(texte, nom) {
+      const id = parseInt(nom, 10);
       const lienMatch = texte.match(/https?:\/\/\S+/);
       const lien = lienMatch ? lienMatch[0] : "";
-      const sansLien = texte.replace(lien, "").trim();
-      const lignes = sansLien.split("\n").map(l => l.trim()).filter(Boolean);
-      const titre = lignes[0] || "Recette " + nom.replace(".txt", "");
-      const description = lignes.slice(1).join("\n");
-      return { id: parseInt(nom, 10), titre, description, lien };
+      const lignes = texte.replace(lien, "").split("\n").map(l => l.trim()).filter(Boolean);
+
+      let titre = "";
+      const sans = texte.replace(lien, " ");
+      let tempsMatch = sans.match(/(\d+\s*(?:h(?:eures?)?\b(?:\s*\d+)?|min(?:utes?)?\b))/i);
+      let portionsMatch = sans.match(/(\d+)\s*(?:personnes|portions|parts|pers\b\.?)/i);
+      let ingredients = [], etapes = [], autres = [];
+      let mode = "";
+
+      for (const l of lignes) {
+        const bas = l.toLowerCase();
+        if (/^(ingr[ée]dients?)\s*:?$/i.test(bas)) { mode = "ing"; continue; }
+        if (/^(pr[ée]paration|[ée]tapes?|recette|instructions?)\s*:?$/i.test(bas)) { mode = "etp"; continue; }
+        if (!titre && !estIngredient(l) && !estEtape(l) && l.length <= 90) { titre = l.replace(/^[#*\s]+/, ""); continue; }
+        if (mode === "ing" || (mode === "" && estIngredient(l) && !estEtape(l))) ingredients.push(nettoyer(l));
+        else if (mode === "etp" || estEtape(l)) etapes.push(nettoyer(l));
+        else autres.push(l);
+      }
+      if (!titre) titre = "Recette " + (isNaN(id) ? "" : id);
+
+      return {
+        id, titre, lien,
+        categorie: deviner(texte),
+        temps: tempsMatch ? tempsMatch[1] : "",
+        portions: portionsMatch ? portionsMatch[1] + " pers." : "",
+        ingredients, etapes, autres: autres.join("\n")
+      };
+    }
+
+    function renderFiltres() {
+      const cats = ["Toutes", ...new Set(recettes.map(r => r.categorie))];
+      const box = document.getElementById("filters");
+      box.innerHTML = "";
+      for (const c of cats) {
+        const b = document.createElement("button");
+        b.textContent = c === "Toutes" ? "Toutes" : (CATEGORIES[c].emoji + " " + c);
+        if (c === categorieActive) b.classList.add("active");
+        b.onclick = () => { categorieActive = c; renderFiltres(); afficher(); };
+        box.appendChild(b);
+      }
     }
 
     function afficher() {
       const q = document.getElementById("recherche").value.toLowerCase();
       const grid = document.getElementById("grid");
-      const empty = document.getElementById("empty");
       grid.innerHTML = "";
       const visibles = recettes.filter(r =>
-        (r.titre + " " + r.description).toLowerCase().includes(q)
+        (categorieActive === "Toutes" || r.categorie === categorieActive) &&
+        (r.titre + " " + r.ingredients.join(" ") + " " + r.autres).toLowerCase().includes(q)
       );
-      empty.hidden = visibles.length > 0;
+      document.getElementById("empty").hidden = visibles.length > 0;
+
       for (const r of visibles) {
         const card = document.createElement("article");
         card.className = "card";
+        const meta = [r.temps, r.portions, r.ingredients.length ? r.ingredients.length + " ingrédients" : ""].filter(Boolean).join(" · ");
         card.innerHTML =
-          "<h2>" + echapper(r.titre) + "</h2>" +
-          (r.description ? "<p>" + echapper(r.description) + "</p>" : "") +
-          (r.lien ? '<a href="' + echapper(r.lien) + '" target="_blank" rel="noopener">Voir la vidéo</a>' : "");
+          '<div class="vignette">' + CATEGORIES[r.categorie].emoji + '</div>' +
+          '<div class="corps"><div class="cat">' + echapper(r.categorie) + '</div>' +
+          '<h2>' + echapper(r.titre) + '</h2>' +
+          (meta ? '<div class="meta">' + echapper(meta) + '</div>' : '') + '</div>';
+        card.onclick = () => ouvrir(r);
         grid.appendChild(card);
       }
     }
 
+    function ouvrir(r) {
+      document.getElementById("d-cat").textContent = CATEGORIES[r.categorie].emoji + " " + r.categorie;
+      document.getElementById("d-titre").textContent = r.titre;
+      document.getElementById("d-meta").textContent = [r.temps, r.portions].filter(Boolean).join(" · ");
+      let html = "";
+      if (r.ingredients.length) html += "<h3>Ingrédients</h3><ul>" + r.ingredients.map(i => "<li>" + echapper(i) + "</li>").join("") + "</ul>";
+      if (r.etapes.length) html += "<h3>Préparation</h3><ol>" + r.etapes.map(e => "<li>" + echapper(e) + "</li>").join("") + "</ol>";
+      if (r.autres) html += "<h3>Notes</h3><p>" + echapper(r.autres) + "</p>";
+      if (!r.ingredients.length && !r.etapes.length && !r.autres) html += "<p>Aucun détail : ouvre la vidéo pour voir la recette.</p>";
+      if (r.lien) html += '<a class="voir" href="' + echapper(r.lien) + '" target="_blank" rel="noopener">▶ Voir la vidéo</a>';
+      document.getElementById("d-corps").innerHTML = html;
+      document.getElementById("detail").showModal();
+    }
+
     async function charger() {
       try {
-        const liste = await fetch("https://api.github.com/repos/" + DEPOT + "/contents/recettes")
-          .then(r => r.json());
+        const liste = await fetch("https://api.github.com/repos/" + DEPOT + "/contents/recettes").then(r => r.json());
         const fichiers = liste.filter(f => /^\d+\.txt$/.test(f.name));
-        recettes = await Promise.all(fichiers.map(async f => {
+        const toutes = await Promise.all(fichiers.map(async f => {
           const texte = await fetch(f.download_url).then(r => r.text());
-          return analyser(texte, f.name);
+          return { texte, nom: f.name };
         }));
-        recettes.sort((a, b) => b.id - a.id);
+        recettes = toutes
+          .filter(t => t.texte.trim() && !t.texte.trim().startsWith("/"))
+          .map(t => analyser(t.texte, t.nom))
+          .sort((a, b) => b.id - a.id);
       } catch (e) {
         recettes = [];
       }
+      renderFiltres();
       afficher();
     }
 
     document.getElementById("recherche").addEventListener("input", afficher);
+    document.getElementById("fermer").addEventListener("click", () => document.getElementById("detail").close());
+    document.getElementById("detail").addEventListener("click", e => { if (e.target.id === "detail") e.target.close(); });
     charger();
   </script>
 </body>
