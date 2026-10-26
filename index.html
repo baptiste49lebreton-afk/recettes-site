@@ -252,10 +252,15 @@
         card.className = "card";
         const meta = [r.temps, r.portions, r.ingredients.length ? r.ingredients.length + " ingrédients" : ""].filter(Boolean).join(" · ");
         card.innerHTML =
-          '<div class="vignette"' + (r.image ? ' style="background:url(' + r.image + ') center/cover"' : '') + '>' + (r.image ? '' : CATEGORIES[r.categorie].emoji) + '</div>' +
+          '<div class="vignette">' + CATEGORIES[r.categorie].emoji + '</div>' +
           '<div class="corps"><div class="cat">' + echapper(r.categorie) + '</div>' +
           '<h2>' + echapper(r.titre) + '</h2>' +
           (meta ? '<div class="meta">' + echapper(meta) + '</div>' : '') + '</div>';
+        const v = card.querySelector(".vignette");
+        const src = r.image || ("https://image.pollinations.ai/prompt/" + encodeURIComponent("appetizing food photography, " + r.titre + ", top view, natural light, plated dish") + "?width=600&height=400&nologo=true&seed=" + (parseInt(r.id) || 1));
+        const img = new Image();
+        img.onload = () => { v.textContent = ""; v.style.background = "url(" + src + ") center/cover"; };
+        img.src = src;
         card.onclick = () => ouvrir(r);
         grid.appendChild(card);
       }
