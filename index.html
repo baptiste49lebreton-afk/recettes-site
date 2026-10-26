@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes recettes</title>
+  <style>
+    :root {
+      --bg: #1b1b2f;
+      --card: #252540;
+      --text: #f2f2f7;
+      --muted: #a9a9c4;
+      --accent: #ff7a59;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+    }
+    h1 { margin: 8px 0 16px; font-size: 1.8rem; }
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    .filters button {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--muted);
+      border-radius: 999px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .filters button.active { background: var(--accent); border-color: var(--accent); color: #111; }
+    .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card img { width: 100%; height: 160px; object-fit: cover; border-radius: 10px; }
+    .card h2 { font-size: 1.1rem; margin: 0; }
+    .card .cat { color: var(--accent); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .card p { color: var(--muted); margin: 0; font-size: 0.95rem; }
+    .card a { color: var(--accent); text-decoration: none; font-weight: 600; margin-top: auto; }
+    .empty { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Mes recettes</h1>
+  <div class="filters" id="filters"></div>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" hidden>Aucune recette pour l'instant.</p>
+
+  <script>
+    let recettes = [];
+    let categorieActive = "Toutes";
+
+    function render() {
+      const grid = document.getElementById("grid");
+      const empty = document.getElementById("empty");
+      grid.innerHTML = "";
+
+      const visibles = recettes.filter(r =>
+        categorieActive === "Toutes" || r.categorie === categorieActive
+      );
+      empty.hidden = visibles.length > 0;
+
+      for (const r of visibles) {
+        const card = document.createElement("article");
+        card.className = "card";
+        if (r.image) {
+          const img = document.createElement("img");
+          img.src = r.image;
+          img.alt = r.titre;
+          card.appendChild(img);
+        }
+        card.innerHTML += `
+          <div class="cat">${r.categorie || ""}</div>
+          <h2>${r.titre}</h2>
+          ${r.description ? `<p>${r.description}</p>` : ""}
+          ${r.lien ? `<a href="${r.lien}" target="_blank" rel="noopener">Voir la vidéo</a>` : ""}
+        `;
+        grid.appendChild(card);
+      }
+    }
+
+    function renderFiltres() {
+      const cats = ["Toutes", ...new Set(recettes.map(r => r.categorie).filter(Boolean))];
+      const box = document.getElementById("filters");
+      box.innerHTML = "";
+      for (const c of cats) {
+        const b = document.createElement("button");
+        b.textContent = c;
+        if (c === categorieActive) b.classList.add("active");
+        b.onclick = () => { categorieActive = c; renderFiltres(); render(); };
+        box.appendChild(b);
+      }
+    }
+
+    fetch("recettes.json")
+      .then(r => r.json())
+      .then(data => {
+        recettes = data;
+        renderFiltres();
+        render();
+      })
+      .catch(() => {
+        document.getElementById("empty").hidden = false;
+      });
+  </script>
+</body>
+</html>
