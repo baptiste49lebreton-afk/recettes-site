@@ -292,7 +292,7 @@
           return { texte, nom: f.name, image: images[f.name.replace(".txt","")] || "" };
         }));
         recettes = toutes
-          .filter(t => t.texte.trim() && !t.texte.trim().startsWith("/"))
+          .filter(t => t.texte.trim() && !t.texte.trim().startsWith("/") && !(t.texte.includes("\\n") && !t.texte.includes("\n")))
           .map(t => Object.assign(analyser(t.texte, t.nom), { image: t.image }))
           .sort((a, b) => b.id - a.id);
       } catch (e) {
