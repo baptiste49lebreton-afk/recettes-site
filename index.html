@@ -21,17 +21,17 @@
       padding: 16px;
     }
     h1 { margin: 8px 0 16px; font-size: 1.8rem; }
-    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-    .filters button {
+    #recherche {
+      width: 100%;
+      max-width: 420px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--muted);
       background: var(--card);
       color: var(--text);
-      border: 1px solid var(--muted);
-      border-radius: 999px;
-      padding: 6px 14px;
-      cursor: pointer;
-      font-size: 0.95rem;
+      font-size: 1rem;
+      margin-bottom: 20px;
     }
-    .filters button.active { background: var(--accent); border-color: var(--accent); color: #111; }
     .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
     .card {
       background: var(--card);
@@ -41,76 +41,75 @@
       flex-direction: column;
       gap: 8px;
     }
-    .card img { width: 100%; height: 160px; object-fit: cover; border-radius: 10px; }
-    .card h2 { font-size: 1.1rem; margin: 0; }
-    .card .cat { color: var(--accent); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
-    .card p { color: var(--muted); margin: 0; font-size: 0.95rem; }
+    .card h2 { font-size: 1.05rem; margin: 0; }
+    .card p { color: var(--muted); margin: 0; font-size: 0.95rem; white-space: pre-line; }
     .card a { color: var(--accent); text-decoration: none; font-weight: 600; margin-top: auto; }
     .empty { color: var(--muted); }
   </style>
 </head>
 <body>
   <h1>Mes recettes</h1>
-  <div class="filters" id="filters"></div>
+  <input id="recherche" type="search" placeholder="Rechercher une recette...">
   <div class="grid" id="grid"></div>
   <p class="empty" id="empty" hidden>Aucune recette pour l'instant.</p>
 
   <script>
+    // Dépôt GitHub où le bot ajoute les recettes (dossier "recettes")
+    const DEPOT = "baptiste49lebreton-afk/recettes-site";
     let recettes = [];
-    let categorieActive = "Toutes";
 
-    function render() {
+    function echapper(t) {
+      return t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function analyser(texte, nom) {
+      const lienMatch = texte.match(/https?:\/\/\S+/);
+      const lien = lienMatch ? lienMatch[0] : "";
+      const sansLien = texte.replace(lien, "").trim();
+      const lignes = sansLien.split("\n").map(l => l.trim()).filter(Boolean);
+      const titre = lignes[0] || "Recette " + nom.replace(".txt", "");
+      const description = lignes.slice(1).join("\n");
+      return { id: parseInt(nom, 10), titre, description, lien };
+    }
+
+    function afficher() {
+      const q = document.getElementById("recherche").value.toLowerCase();
       const grid = document.getElementById("grid");
       const empty = document.getElementById("empty");
       grid.innerHTML = "";
-
       const visibles = recettes.filter(r =>
-        categorieActive === "Toutes" || r.categorie === categorieActive
+        (r.titre + " " + r.description).toLowerCase().includes(q)
       );
       empty.hidden = visibles.length > 0;
-
       for (const r of visibles) {
         const card = document.createElement("article");
         card.className = "card";
-        if (r.image) {
-          const img = document.createElement("img");
-          img.src = r.image;
-          img.alt = r.titre;
-          card.appendChild(img);
-        }
-        card.innerHTML += `
-          <div class="cat">${r.categorie || ""}</div>
-          <h2>${r.titre}</h2>
-          ${r.description ? `<p>${r.description}</p>` : ""}
-          ${r.lien ? `<a href="${r.lien}" target="_blank" rel="noopener">Voir la vidéo</a>` : ""}
-        `;
+        card.innerHTML =
+          "<h2>" + echapper(r.titre) + "</h2>" +
+          (r.description ? "<p>" + echapper(r.description) + "</p>" : "") +
+          (r.lien ? '<a href="' + echapper(r.lien) + '" target="_blank" rel="noopener">Voir la vidéo</a>' : "");
         grid.appendChild(card);
       }
     }
 
-    function renderFiltres() {
-      const cats = ["Toutes", ...new Set(recettes.map(r => r.categorie).filter(Boolean))];
-      const box = document.getElementById("filters");
-      box.innerHTML = "";
-      for (const c of cats) {
-        const b = document.createElement("button");
-        b.textContent = c;
-        if (c === categorieActive) b.classList.add("active");
-        b.onclick = () => { categorieActive = c; renderFiltres(); render(); };
-        box.appendChild(b);
+    async function charger() {
+      try {
+        const liste = await fetch("https://api.github.com/repos/" + DEPOT + "/contents/recettes")
+          .then(r => r.json());
+        const fichiers = liste.filter(f => /^\d+\.txt$/.test(f.name));
+        recettes = await Promise.all(fichiers.map(async f => {
+          const texte = await fetch(f.download_url).then(r => r.text());
+          return analyser(texte, f.name);
+        }));
+        recettes.sort((a, b) => b.id - a.id);
+      } catch (e) {
+        recettes = [];
       }
+      afficher();
     }
 
-    fetch("recettes.json")
-      .then(r => r.json())
-      .then(data => {
-        recettes = data;
-        renderFiltres();
-        render();
-      })
-      .catch(() => {
-        document.getElementById("empty").hidden = false;
-      });
+    document.getElementById("recherche").addEventListener("input", afficher);
+    charger();
   </script>
 </body>
 </html>
