@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mes recettes</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://raw.githubusercontent.com https://avatars.githubusercontent.com data:; connect-src https://api.github.com https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <style>
     :root {
       --bg: #fff8ee;
@@ -118,20 +120,66 @@
       background: var(--accent); color: #fff;
       text-decoration: none; padding: 10px 18px; border-radius: 999px; font-weight: 600;
     }
+
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px; align-items:center; }
+    .toolbar select, .toolbar input { padding:8px 14px; border-radius:999px; border:none; background:#fff; box-shadow:0 2px 8px rgba(120,80,50,.1); font-size:.9rem; color:var(--text); }
+    .toolbar button, .filters button.mini { background:#fff; border:none; border-radius:999px; padding:8px 14px; font-size:.9rem; cursor:pointer; box-shadow:0 2px 8px rgba(120,80,50,.1); color:var(--text); }
+    .toolbar button.active { background:var(--accent); color:#fff; }
+    .tags { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:10px; }
+    .tag { font-size:.8rem; background:var(--accent-soft); color:var(--accent); padding:3px 10px; border-radius:999px; cursor:pointer; border:none; }
+    .tag.active { background:var(--accent); color:#fff; }
+    .card { position:relative; }
+    .card .fav { position:absolute; top:8px; left:10px; font-size:1.3rem; text-shadow:0 1px 4px rgba(0,0,0,.35); }
+    .card .date { color:var(--muted); font-size:.8rem; }
+    .actions { display:flex; gap:6px; padding:0 14px 14px; flex-wrap:wrap; }
+    .actions button { border:none; background:var(--accent-soft); border-radius:10px; padding:6px 10px; cursor:pointer; font-size:1rem; }
+    .actions button.danger { background:#fbd9d3; }
+    footer { text-align:center; padding:24px 16px 40px; color:var(--muted); font-size:.85rem; }
+    footer button { background:none; border:none; color:var(--muted); cursor:pointer; text-decoration:underline; font-size:.85rem; }
+    .badge-admin { display:inline-block; background:var(--green); color:#fff; border-radius:999px; padding:3px 12px; font-size:.8rem; margin-bottom:8px; }
+    .form { padding:18px 22px 22px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; max-height:85vh; }
+    .form label { font-size:.85rem; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+    .form input, .form textarea, .form select { padding:9px 12px; border-radius:10px; border:1px solid #e6d9cc; font:inherit; color:var(--text); background:#fff; }
+    .form textarea { min-height:110px; resize:vertical; }
+    .form .rang { display:flex; gap:10px; flex-wrap:wrap; } .form .rang label { flex:1; min-width:130px; }
+    .btn { background:var(--accent); color:#fff; border:none; border-radius:999px; padding:10px 20px; cursor:pointer; font-weight:600; font-size:1rem; }
+    .btn.sec { background:#eee; color:var(--text); }
+    .msg { padding:8px 12px; border-radius:10px; background:#fff3cd; font-size:.9rem; }
+    #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--text); color:#fff; padding:10px 18px; border-radius:999px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:9; }
+    #toast.on { opacity:1; }
   </style>
 </head>
 <body>
   <header>
+    <div id="admin-badge"></div>
     <h1>Mes recettes</h1>
     <p>Toutes mes trouvailles gourmandes au même endroit</p>
-    <input id="recherche" type="search" placeholder="Rechercher une recette ou un ingrédient...">
+    <input id="recherche" type="search" placeholder="Rechercher une recette, un tag, un ingrédient...">
     <div class="filters" id="filters"></div>
+    <div class="toolbar">
+      <select id="tri" aria-label="Trier">
+        <option value="manuel">Mon ordre</option>
+        <option value="recent">Plus récentes</option>
+        <option value="ancien">Plus anciennes</option>
+        <option value="az">A → Z</option>
+        <option value="rapide">Plus rapides</option>
+      </select>
+      <input id="aliment" list="liste-aliments" placeholder="Avec l'ingrédient…">
+      <datalist id="liste-aliments"></datalist>
+      <button id="btn-fav">⭐ Favoris</button>
+      <button id="btn-corbeille" hidden>🗑 Corbeille</button>
+    </div>
+    <div class="tags" id="tags"></div>
   </header>
 
   <main>
     <div class="grid" id="grid"></div>
-    <p class="empty" id="empty" hidden>Aucune recette pour l'instant. Envoie-en une au bot Telegram !</p>
+    <p class="empty" id="empty" hidden>Aucune recette à afficher.</p>
   </main>
+  <footer>
+    <span id="compteur"></span><br>
+    <button id="btn-admin">🔒 Mode édition</button>
+  </footer>
 
   <dialog id="detail">
     <div class="detail-tete">
@@ -143,10 +191,47 @@
     <div class="detail-corps" id="d-corps"></div>
   </dialog>
 
-  <script>
-    // Dépôt GitHub où le bot ajoute les recettes (dossier "recettes")
-    const DEPOT = "baptiste49lebreton-afk/recettes-site";
+  <dialog id="edition">
+    <form class="form" id="form-edition" method="dialog">
+      <h2 style="margin:0;font-family:Georgia,serif">Modifier la recette</h2>
+      <label>Titre <input id="e-titre" maxlength="120"></label>
+      <div class="rang">
+        <label>Catégorie <select id="e-cat"></select></label>
+        <label>Date <input id="e-date" type="date"></label>
+      </div>
+      <div class="rang">
+        <label>Temps <input id="e-temps" placeholder="ex : 40 min" maxlength="30"></label>
+        <label>Personnes <input id="e-portions" placeholder="ex : 4 pers." maxlength="30"></label>
+      </div>
+      <label>Tags (séparés par des virgules) <input id="e-tags" placeholder="ex : rapide, enfants, été"></label>
+      <label>Ingrédients (un par ligne) <textarea id="e-ing"></textarea></label>
+      <label>Étapes (une par ligne) <textarea id="e-etp"></textarea></label>
+      <label>Notes <textarea id="e-notes" style="min-height:70px"></textarea></label>
+      <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" class="btn sec" id="e-annuler">Annuler</button>
+        <button type="submit" class="btn" id="e-ok">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
 
+  <dialog id="connexion">
+    <form class="form" id="form-connexion" method="dialog">
+      <h2 style="margin:0;font-family:Georgia,serif">Mode édition</h2>
+      <p class="msg">Colle ici ta clé GitHub personnelle (elle reste uniquement dans ce navigateur, jamais envoyée ailleurs qu'à GitHub). Sans clé, le site reste en lecture seule.</p>
+      <label>Clé GitHub <input id="c-token" type="password" autocomplete="off" placeholder="github_pat_..."></label>
+      <div id="c-erreur" class="msg" hidden></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" class="btn sec" id="c-annuler">Annuler</button>
+        <button type="submit" class="btn">Activer</button>
+      </div>
+    </form>
+  </dialog>
+  <div id="toast"></div>
+
+  <script>
+    "use strict";
+    const DEPOT = "baptiste49lebreton-afk/recettes-site";
+    const API = "https://api.github.com/repos/" + DEPOT + "/contents/recettes";
     const CATEGORIES = {
       "Dessert":   { emoji: "🍰", mots: ["gâteau", "gateau", "cake", "sucre glace", "cassonade", "vanille", "tarte", "chocolat", "cookie", "brownie", "muffin", "crêpe", "crepe", "flan", "glace", "dessert", "pâte à tartiner", "caramel", "cheesecake", "tiramisu"] },
       "Petit-déj": { emoji: "🥞", mots: ["pancake", "porridge", "granola", "petit-déj", "petit déj", "brunch", "gaufre", "tartine"] },
@@ -156,13 +241,29 @@
       "Plat":      { emoji: "🍝", mots: [] }
     };
 
-    let recettes = [];
-    let categorieActive = "Toutes";
+    let recettes = [];        // recettes affichables (avec surcharges appliquées)
+    let meta = { v: 1, ordre: [], r: {} };
+    let metaSha = null;
+    let fichiersInfo = {};    // id -> { txt:{path,sha}, img:{path,sha} }
+    let etat = { cat: "Toutes", tag: "", fav: false, corbeille: false, tri: "manuel", aliment: "" };
+    let token = null;
+    try { token = localStorage.getItem("rb_token"); } catch (e) {}
+    let admin = false;
 
+    const $ = id => document.getElementById(id);
     function echapper(t) {
-      return String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      return String(t == null ? "" : t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
+    function urlSure(u) { return /^https?:\/\//i.test(u) ? u : ""; }
+    function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 2600); }
+    function headers(extra) {
+      const h = Object.assign({ "Accept": "application/vnd.github+json" }, extra || {});
+      if (token) h["Authorization"] = "Bearer " + token;
+      return h;
+    }
+    function b64(s) { return btoa(unescape(encodeURIComponent(s))); }
 
+    // ---------- Analyse du texte ----------
     function deviner(texte) {
       const lignes = texte.split("\n").filter(l => l.trim());
       const titre = (lignes[0] || "").toLowerCase();
@@ -170,40 +271,29 @@
       let meilleur = "Plat", max = 0;
       for (const [nom, def] of Object.entries(CATEGORIES)) {
         let score = 0;
-        for (const m of def.mots) {
-          if (titre.includes(m)) score += 3;
-          else if (t.includes(m)) score += 1;
-        }
+        for (const m of def.mots) { if (titre.includes(m)) score += 3; else if (t.includes(m)) score += 1; }
         if (score > max) { max = score; meilleur = nom; }
       }
       return max >= 2 ? meilleur : "Plat";
     }
-
-    // Une ligne ressemble à un ingrédient : tiret/puce, ou quantité (200 g, 2 oeufs, 1 c. à soupe...)
     function estIngredient(l) {
       return /^[-•*–·✅🔸▪]/u.test(l) ||
         /^\d+([.,/]\d+)?\s*(g|kg|ml|cl|l|c\.|cuill|oeuf|œuf|pincée|gousse|tranche|sachet|verre|pot)/i.test(l);
     }
-    function estEtape(l) {
-      return /^(\d+\s*[.)\-:]|étape|etape|step)/i.test(l);
-    }
+    function estEtape(l) { return /^(\d+\s*[.)\-:]|étape|etape|step)/i.test(l); }
     function nettoyer(l) {
       return l.replace(/^[-•*–·✅🔸▪]+\s*/u, "").replace(/^(\d+\s*[.)\-:]|étape\s*\d*\s*[:.\-]?)\s*/i, "").trim();
     }
-
     function analyser(texte, nom) {
       const id = parseInt(nom, 10);
       const lienMatch = texte.match(/https?:\/\/\S+/);
       const lien = lienMatch ? lienMatch[0] : "";
       const lignes = texte.replace(lien, "").split("\n").map(l => l.trim()).filter(Boolean);
-
       let titre = "";
       const sans = texte.replace(lien, " ");
-      let tempsMatch = sans.match(/(\d+\s*(?:h(?:eures?)?\b(?:\s*\d+)?|min(?:utes?)?\b))/i);
-      let portionsMatch = sans.match(/(\d+)\s*(?:personnes|portions|parts|pers\b\.?)/i);
-      let ingredients = [], etapes = [], autres = [];
-      let mode = "";
-
+      const tempsMatch = sans.match(/(\d+\s*(?:h(?:eures?)?(?:\s?\d{2}\b)?|min(?:utes?)?\b))/i);
+      const portionsMatch = sans.match(/(\d+)\s*(?:personnes|portions|parts|pers\b\.?)/i);
+      let ingredients = [], etapes = [], autres = [], mode = "";
       for (const l of lignes) {
         const bas = l.toLowerCase();
         if (/^(ingr[ée]dients?)\s*:?$/i.test(bas)) { mode = "ing"; continue; }
@@ -214,98 +304,302 @@
         else autres.push(l);
       }
       if (!titre) titre = "Recette " + (isNaN(id) ? "" : id);
-
-      return {
-        id, titre, lien,
-        categorie: deviner(texte),
-        temps: tempsMatch ? tempsMatch[1] : "",
-        portions: portionsMatch ? portionsMatch[1] + " pers." : "",
-        ingredients, etapes, autres: autres.join("\n")
-      };
+      let date = "";
+      if (id > 1.5e9 && id < 4e9) date = new Date(id * 1000).toISOString().slice(0, 10);
+      return { id: String(id), titre, lien, categorie: deviner(texte), temps: tempsMatch ? tempsMatch[1] : "",
+        portions: portionsMatch ? portionsMatch[1] + " pers." : "", ingredients, etapes, autres: autres.join("\n"),
+        date, tags: [], fav: false, hidden: false };
+    }
+    function appliquerMeta(r) {
+      const m = meta.r[r.id] || {};
+      for (const k of ["titre", "categorie", "temps", "portions", "date", "autres"]) if (typeof m[k] === "string") r[k] = m[k];
+      if (Array.isArray(m.ingredients)) r.ingredients = m.ingredients;
+      if (Array.isArray(m.etapes)) r.etapes = m.etapes;
+      if (Array.isArray(m.tags)) r.tags = m.tags;
+      r.fav = !!m.fav; r.hidden = !!m.hidden;
+      if (!CATEGORIES[r.categorie]) r.categorie = "Plat";
+      return r;
+    }
+    function minutes(t) {
+      const m = String(t || "").match(/(\d+)\s*h(?:eures?)?\s*(\d+)?|(\d+)\s*min/i);
+      if (!m) return 9999;
+      if (m[3]) return parseInt(m[3], 10);
+      return parseInt(m[1], 10) * 60 + (m[2] ? parseInt(m[2], 10) : 0);
     }
 
+    // ---------- Chargement ----------
+    async function charger() {
+      try {
+        const rep = await fetch(API + "?t=" + Date.now(), { headers: headers() });
+        const liste = await rep.json();
+        if (!Array.isArray(liste)) throw new Error("liste");
+        fichiersInfo = {};
+        const imgs = {};
+        for (const f of liste) {
+          let m = f.name.match(/^(\d+)\.txt$/);
+          if (m) { (fichiersInfo[m[1]] = fichiersInfo[m[1]] || {}).txt = { path: f.path, sha: f.sha, url: f.download_url }; continue; }
+          m = f.name.match(/^(\d+)\.(jpe?g|png)$/i);
+          if (m) { (fichiersInfo[m[1]] = fichiersInfo[m[1]] || {}).img = { path: f.path, sha: f.sha }; imgs[m[1]] = f.download_url; }
+        }
+        const metaFile = liste.find(f => f.name === "meta.json");
+        if (metaFile) {
+          metaSha = metaFile.sha;
+          try {
+            const t = await fetch(API + "/meta.json?t=" + Date.now(), { headers: headers({ "Accept": "application/vnd.github.raw+json" }) }).then(r => r.text());
+            const j = JSON.parse(t);
+            if (j && typeof j === "object") meta = { v: 1, ordre: Array.isArray(j.ordre) ? j.ordre.map(String) : [], r: j.r && typeof j.r === "object" ? j.r : {} };
+          } catch (e) {}
+        }
+        const ids = Object.keys(fichiersInfo).filter(i => fichiersInfo[i].txt);
+        const toutes = await Promise.all(ids.map(async i => {
+          const texte = await fetch(fichiersInfo[i].txt.url).then(r => r.text());
+          return { texte, i };
+        }));
+        recettes = toutes
+          .filter(t => t.texte.trim() && !t.texte.trim().startsWith("/") && !(t.texte.includes("\\n") && !t.texte.includes("\n")))
+          .map(t => {
+            const r = analyser(t.texte, t.i + ".txt");
+            r.image = imgs[t.i] || "";
+            return appliquerMeta(r);
+          });
+      } catch (e) { recettes = []; }
+      rafraichir();
+    }
+
+    // ---------- Affichage ----------
+    function rafraichir() { renderFiltres(); renderTags(); renderAliments(); afficher(); renderAdmin(); }
+
     function renderFiltres() {
-      const cats = ["Toutes", ...new Set(recettes.map(r => r.categorie))];
-      const box = document.getElementById("filters");
-      box.innerHTML = "";
+      const visibles = recettes.filter(r => !r.hidden);
+      const cats = ["Toutes", ...new Set(visibles.map(r => r.categorie))];
+      const box = $("filters"); box.innerHTML = "";
       for (const c of cats) {
         const b = document.createElement("button");
         b.textContent = c === "Toutes" ? "Toutes" : (CATEGORIES[c].emoji + " " + c);
-        if (c === categorieActive) b.classList.add("active");
-        b.onclick = () => { categorieActive = c; renderFiltres(); afficher(); };
+        if (c === etat.cat) b.classList.add("active");
+        b.onclick = () => { etat.cat = c; rafraichir(); };
         box.appendChild(b);
       }
     }
-
-    function afficher() {
-      const q = document.getElementById("recherche").value.toLowerCase();
-      const grid = document.getElementById("grid");
-      grid.innerHTML = "";
-      const visibles = recettes.filter(r =>
-        (categorieActive === "Toutes" || r.categorie === categorieActive) &&
-        (r.titre + " " + r.ingredients.join(" ") + " " + r.autres).toLowerCase().includes(q)
-      );
-      document.getElementById("empty").hidden = visibles.length > 0;
-
-      for (const r of visibles) {
-        const card = document.createElement("article");
-        card.className = "card";
-        const meta = [r.temps, r.portions, r.ingredients.length ? r.ingredients.length + " ingrédients" : ""].filter(Boolean).join(" · ");
-        card.innerHTML =
-          '<div class="vignette">' + CATEGORIES[r.categorie].emoji + '</div>' +
-          '<div class="corps"><div class="cat">' + echapper(r.categorie) + '</div>' +
-          '<h2>' + echapper(r.titre) + '</h2>' +
-          (meta ? '<div class="meta">' + echapper(meta) + '</div>' : '') + '</div>';
-        if (r.image) {
-          const v = card.querySelector(".vignette");
-          const img = new Image();
-          img.onload = () => { v.textContent = ""; v.style.background = "url(" + r.image + ") center/cover"; };
-          img.src = r.image;
-        }
-        card.onclick = () => ouvrir(r);
-        grid.appendChild(card);
-      }
+    function renderTags() {
+      const set = new Set();
+      recettes.filter(r => !r.hidden).forEach(r => r.tags.forEach(t => set.add(t)));
+      const box = $("tags"); box.innerHTML = "";
+      [...set].sort().forEach(t => {
+        const b = document.createElement("button");
+        b.className = "tag" + (etat.tag === t ? " active" : "");
+        b.textContent = "#" + t;
+        b.onclick = () => { etat.tag = etat.tag === t ? "" : t; rafraichir(); };
+        box.appendChild(b);
+      });
     }
-
+    function motsIngredient(l) {
+      return l.toLowerCase().replace(/[\d.,/()]+/g, " ")
+        .replace(/\b(g|kg|ml|cl|l|cuill[èe]res?|à|a|café|soupe|de|d'|du|des|la|le|les|un|une|et|ou|pincée|gousses?|tranches?|sachets?|pot|type|pas|poignée)\b/g, " ")
+        .split(/[^a-zàâçéèêëîïôûùüÿœ'-]+/i).filter(w => w.length > 2);
+    }
+    function renderAliments() {
+      const set = new Set();
+      recettes.filter(r => !r.hidden).forEach(r => r.ingredients.forEach(l => motsIngredient(l).forEach(w => set.add(w))));
+      $("liste-aliments").innerHTML = [...set].sort().map(w => "<option value=\"" + echapper(w) + "\">").join("");
+    }
+    function triees(liste) {
+      const l = liste.slice();
+      const cmpDate = (a, b) => (b.date || "").localeCompare(a.date || "") || (Number(b.id) - Number(a.id));
+      switch (etat.tri) {
+        case "recent": l.sort(cmpDate); break;
+        case "ancien": l.sort((a, b) => -cmpDate(a, b)); break;
+        case "az": l.sort((a, b) => a.titre.localeCompare(b.titre, "fr")); break;
+        case "rapide": l.sort((a, b) => minutes(a.temps) - minutes(b.temps)); break;
+        default: {
+          const pos = id => { const k = meta.ordre.indexOf(id); return k < 0 ? -1 : k; };
+          l.sort((a, b) => {
+            if (a.fav !== b.fav) return a.fav ? -1 : 1;
+            const pa = pos(a.id), pb = pos(b.id);
+            if (pa < 0 && pb < 0) return Number(b.id) - Number(a.id);
+            if (pa < 0) return -1; if (pb < 0) return 1;
+            return pa - pb;
+          });
+        }
+      }
+      return l;
+    }
+    function afficher() {
+      const q = $("recherche").value.toLowerCase().trim();
+      const al = etat.aliment.toLowerCase().trim();
+      const grid = $("grid"); grid.innerHTML = "";
+      let liste = recettes.filter(r => etat.corbeille ? r.hidden : !r.hidden);
+      liste = liste.filter(r =>
+        (etat.cat === "Toutes" || r.categorie === etat.cat) &&
+        (!etat.fav || r.fav) &&
+        (!etat.tag || r.tags.includes(etat.tag)) &&
+        (!al || r.ingredients.join(" ").toLowerCase().includes(al)) &&
+        (!q || (r.titre + " " + r.ingredients.join(" ") + " " + r.autres + " " + r.tags.join(" ")).toLowerCase().includes(q)));
+      liste = triees(liste);
+      $("empty").hidden = liste.length > 0;
+      $("compteur").textContent = recettes.filter(r => !r.hidden).length + " recette(s)";
+      $("btn-fav").classList.toggle("active", etat.fav);
+      $("btn-corbeille").classList.toggle("active", etat.corbeille);
+      for (const r of liste) grid.appendChild(carte(r, liste));
+    }
+    function carte(r, liste) {
+      const card = document.createElement("article");
+      card.className = "card";
+      const meta2 = [r.temps, r.portions, r.ingredients.length ? r.ingredients.length + " ingrédients" : ""].filter(Boolean).join(" · ");
+      const dateTxt = r.date ? new Date(r.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
+      card.innerHTML =
+        '<div class="vignette">' + CATEGORIES[r.categorie].emoji + '</div>' +
+        (r.fav ? '<div class="fav">⭐</div>' : '') +
+        '<div class="corps"><div class="cat">' + echapper(r.categorie) + '</div>' +
+        '<h2>' + echapper(r.titre) + '</h2>' +
+        (meta2 ? '<div class="meta">' + echapper(meta2) + '</div>' : '') +
+        (dateTxt ? '<div class="date">' + echapper(dateTxt) + '</div>' : '') + '</div>';
+      const img = urlSure(r.image);
+      if (img && img.startsWith("https://raw.githubusercontent.com/")) {
+        const v = card.querySelector(".vignette"); const im = new Image();
+        im.onload = () => { v.textContent = ""; v.style.background = "url(" + img + ") center/cover"; };
+        im.src = img;
+      }
+      card.onclick = () => ouvrir(r);
+      if (admin) {
+        const bar = document.createElement("div"); bar.className = "actions";
+        const mk = (txt, titre, fn, cls) => { const b = document.createElement("button"); b.textContent = txt; b.title = titre; if (cls) b.className = cls; b.onclick = e => { e.stopPropagation(); fn(); }; bar.appendChild(b); };
+        if (etat.corbeille) {
+          mk("♻️", "Restaurer", () => modifier(r.id, { hidden: false }, "Recette restaurée"));
+          mk("❌", "Supprimer définitivement", () => supprimerDefinitivement(r), "danger");
+        } else {
+          mk(r.fav ? "★" : "☆", "Favori", () => modifier(r.id, { fav: !r.fav }));
+          if (etat.tri === "manuel") { mk("⬆️", "Monter", () => deplacer(r.id, -1, liste)); mk("⬇️", "Descendre", () => deplacer(r.id, 1, liste)); }
+          mk("✏️", "Modifier", () => ouvrirEdition(r));
+          mk("🗑", "Mettre à la corbeille", () => { if (confirm("Mettre « " + r.titre + " » à la corbeille ?")) modifier(r.id, { hidden: true }, "Mis à la corbeille"); }, "danger");
+        }
+        card.appendChild(bar);
+      }
+      return card;
+    }
     function ouvrir(r) {
-      document.getElementById("d-cat").textContent = CATEGORIES[r.categorie].emoji + " " + r.categorie;
-      document.getElementById("d-titre").textContent = r.titre;
-      document.getElementById("d-meta").textContent = [r.temps, r.portions].filter(Boolean).join(" · ");
+      $("d-cat").textContent = CATEGORIES[r.categorie].emoji + " " + r.categorie;
+      $("d-titre").textContent = r.titre;
+      $("d-meta").textContent = [r.temps, r.portions, r.tags.map(t => "#" + t).join(" ")].filter(Boolean).join(" · ");
       let html = "";
       if (r.ingredients.length) html += "<h3>Ingrédients</h3><ul>" + r.ingredients.map(i => "<li>" + echapper(i) + "</li>").join("") + "</ul>";
       if (r.etapes.length) html += "<h3>Préparation</h3><ol>" + r.etapes.map(e => "<li>" + echapper(e) + "</li>").join("") + "</ol>";
       if (r.autres) html += "<h3>Notes</h3><p>" + echapper(r.autres) + "</p>";
       if (!r.ingredients.length && !r.etapes.length && !r.autres) html += "<p>Aucun détail : ouvre la vidéo pour voir la recette.</p>";
-      if (r.lien) html += '<a class="voir" href="' + echapper(r.lien) + '" target="_blank" rel="noopener">▶ Voir la vidéo</a>';
-      document.getElementById("d-corps").innerHTML = html;
-      document.getElementById("detail").showModal();
+      const lien = urlSure(r.lien);
+      if (lien) html += '<a class="voir" href="' + echapper(lien) + '" target="_blank" rel="noopener noreferrer">▶ Voir la vidéo</a>';
+      $("d-corps").innerHTML = html;
+      $("detail").showModal();
     }
 
-    async function charger() {
+    // ---------- Sauvegarde (mode édition) ----------
+    async function sauvegarderMeta() {
+      // récupère le sha le plus récent pour éviter un conflit
       try {
-        const liste = await fetch("https://api.github.com/repos/" + DEPOT + "/contents/recettes").then(r => r.json());
-        const fichiers = liste.filter(f => /^\d+\.txt$/.test(f.name));
-        const images = {};
-        for (const f of liste) { const m = f.name.match(/^(\d+)\.(jpe?g|png)$/i); if (m) images[m[1]] = f.download_url; }
-        const toutes = await Promise.all(fichiers.map(async f => {
-          const texte = await fetch(f.download_url).then(r => r.text());
-          return { texte, nom: f.name, image: images[f.name.replace(".txt","")] || "" };
-        }));
-        recettes = toutes
-          .filter(t => t.texte.trim() && !t.texte.trim().startsWith("/") && !(t.texte.includes("\\n") && !t.texte.includes("\n")))
-          .map(t => Object.assign(analyser(t.texte, t.nom), { image: t.image }))
-          .sort((a, b) => b.id - a.id);
-      } catch (e) {
-        recettes = [];
-      }
-      renderFiltres();
-      afficher();
+        const r = await fetch(API + "/meta.json?t=" + Date.now(), { headers: headers() });
+        if (r.ok) metaSha = (await r.json()).sha; else metaSha = null;
+      } catch (e) {}
+      const corps = { message: "Mise à jour des recettes (site)", content: b64(JSON.stringify(meta, null, 1)) };
+      if (metaSha) corps.sha = metaSha;
+      const rep = await fetch(API + "/meta.json", { method: "PUT", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(corps) });
+      if (!rep.ok) throw new Error("Échec de l'enregistrement (" + rep.status + ")");
+      metaSha = (await rep.json()).content.sha;
     }
+    async function modifier(id, champs, message) {
+      const avant = JSON.stringify(meta);
+      meta.r[id] = Object.assign(meta.r[id] || {}, champs);
+      const r = recettes.find(x => x.id === id); if (r) Object.assign(r, champs);
+      rafraichir();
+      try { await sauvegarderMeta(); toast(message || "Enregistré ✓"); }
+      catch (e) { meta = JSON.parse(avant); await charger(); toast("Erreur : " + e.message); }
+    }
+    async function deplacer(id, sens, liste) {
+      const ids = liste.map(r => r.id);
+      const i = ids.indexOf(id), j = i + sens;
+      if (j < 0 || j >= ids.length) return;
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+      const autres = meta.ordre.filter(x => !ids.includes(x));
+      const avant = JSON.stringify(meta);
+      meta.ordre = ids.concat(autres);
+      rafraichir();
+      try { await sauvegarderMeta(); } catch (e) { meta = JSON.parse(avant); await charger(); toast("Erreur : " + e.message); }
+    }
+    async function supprimerDefinitivement(r) {
+      if (!confirm("Supprimer définitivement « " + r.titre + " » ? Impossible d'annuler.")) return;
+      try {
+        for (const k of ["txt", "img"]) {
+          const f = (fichiersInfo[r.id] || {})[k]; if (!f) continue;
+          const rep = await fetch("https://api.github.com/repos/" + DEPOT + "/contents/" + f.path, { method: "DELETE", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify({ message: "Suppression d'une recette", sha: f.sha }) });
+          if (!rep.ok) throw new Error("suppression refusée (" + rep.status + ")");
+        }
+        delete meta.r[r.id]; meta.ordre = meta.ordre.filter(x => x !== r.id);
+        await sauvegarderMeta();
+        toast("Supprimée définitivement"); await charger();
+      } catch (e) { toast("Erreur : " + e.message); }
+    }
+    function ouvrirEdition(r) {
+      $("e-cat").innerHTML = Object.keys(CATEGORIES).map(c => "<option>" + echapper(c) + "</option>").join("");
+      $("e-titre").value = r.titre; $("e-cat").value = r.categorie; $("e-date").value = r.date || "";
+      $("e-temps").value = r.temps; $("e-portions").value = r.portions; $("e-tags").value = r.tags.join(", ");
+      $("e-ing").value = r.ingredients.join("\n"); $("e-etp").value = r.etapes.join("\n"); $("e-notes").value = r.autres;
+      $("form-edition").dataset.id = r.id;
+      $("edition").showModal();
+    }
+    $("form-edition").addEventListener("submit", e => {
+      e.preventDefault();
+      const id = $("form-edition").dataset.id;
+      const lignes = v => v.split("\n").map(x => x.trim()).filter(Boolean);
+      modifier(id, {
+        titre: $("e-titre").value.trim().slice(0, 120) || "Sans titre", categorie: $("e-cat").value, date: $("e-date").value,
+        temps: $("e-temps").value.trim(), portions: $("e-portions").value.trim(),
+        tags: $("e-tags").value.split(",").map(t => t.trim().replace(/^#/, "").toLowerCase()).filter(Boolean).slice(0, 12),
+        ingredients: lignes($("e-ing").value), etapes: lignes($("e-etp").value), autres: $("e-notes").value.trim()
+      });
+      $("edition").close();
+    });
+    $("e-annuler").onclick = () => $("edition").close();
 
-    document.getElementById("recherche").addEventListener("input", afficher);
-    document.getElementById("fermer").addEventListener("click", () => document.getElementById("detail").close());
-    document.getElementById("detail").addEventListener("click", e => { if (e.target.id === "detail") e.target.close(); });
-    charger();
+    // ---------- Connexion admin ----------
+    async function verifierToken(t) {
+      const rep = await fetch("https://api.github.com/repos/" + DEPOT, { headers: { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + t } });
+      if (!rep.ok) return false;
+      const j = await rep.json();
+      return !!(j.permissions && j.permissions.push);
+    }
+    function renderAdmin() {
+      $("admin-badge").innerHTML = admin ? '<span class="badge-admin">🔓 Mode édition activé</span>' : "";
+      $("btn-admin").textContent = admin ? "🔓 Quitter le mode édition" : "🔒 Mode édition";
+      $("btn-corbeille").hidden = !admin;
+    }
+    $("btn-admin").onclick = () => {
+      if (admin) { admin = false; token = null; try { localStorage.removeItem("rb_token"); } catch (e) {} etat.corbeille = false; rafraichir(); toast("Déconnecté"); return; }
+      $("c-erreur").hidden = true; $("c-token").value = ""; $("connexion").showModal();
+    };
+    $("c-annuler").onclick = () => $("connexion").close();
+    $("form-connexion").addEventListener("submit", async e => {
+      e.preventDefault();
+      const t = $("c-token").value.trim();
+      if (!t) return;
+      const ok = await verifierToken(t).catch(() => false);
+      if (!ok) { $("c-erreur").textContent = "Cette clé ne permet pas de modifier le dépôt. Vérifie qu'elle a bien le droit « Contents : Read and write »."; $("c-erreur").hidden = false; return; }
+      token = t; admin = true;
+      try { localStorage.setItem("rb_token", t); } catch (er) {}
+      $("connexion").close(); rafraichir(); toast("Mode édition activé");
+    });
+
+    // ---------- Évènements ----------
+    $("recherche").addEventListener("input", afficher);
+    $("tri").addEventListener("change", e => { etat.tri = e.target.value; afficher(); });
+    $("aliment").addEventListener("input", e => { etat.aliment = e.target.value; afficher(); });
+    $("btn-fav").onclick = () => { etat.fav = !etat.fav; afficher(); };
+    $("btn-corbeille").onclick = () => { etat.corbeille = !etat.corbeille; afficher(); };
+    $("fermer").addEventListener("click", () => $("detail").close());
+    for (const id of ["detail", "edition", "connexion"]) $(id).addEventListener("click", e => { if (e.target.id === id) e.target.close(); });
+
+    (async () => {
+      if (token) { admin = await verifierToken(token).catch(() => false); if (!admin) { token = null; try { localStorage.removeItem("rb_token"); } catch (e) {} } }
+      await charger();
+    })();
   </script>
 </body>
 </html>
