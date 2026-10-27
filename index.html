@@ -168,6 +168,7 @@
       <datalist id="liste-aliments"></datalist>
       <button id="btn-fav">⭐ Favoris</button>
       <button id="btn-corbeille" hidden>🗑 Corbeille</button>
+      <button id="btn-vider" hidden>❌ Vider la corbeille</button>
     </div>
     <div class="tags" id="tags"></div>
   </header>
@@ -317,6 +318,8 @@
       if (Array.isArray(m.etapes)) r.etapes = m.etapes;
       if (Array.isArray(m.tags)) r.tags = m.tags;
       r.fav = !!m.fav; r.hidden = !!m.hidden;
+      r.vide = !r.ingredients.length && !r.etapes.length && !r.autres;
+      if (r.vide && typeof m.hidden !== "boolean") r.hidden = true;
       if (!CATEGORIES[r.categorie]) r.categorie = "Plat";
       return r;
     }
@@ -570,6 +573,8 @@
       $("admin-badge").innerHTML = admin ? '<span class="badge-admin">🔓 Mode édition activé</span>' : "";
       $("btn-admin").textContent = admin ? "🔓 Quitter le mode édition" : "🔒 Mode édition";
       $("btn-corbeille").hidden = !admin;
+      $("btn-vider").hidden = !(admin && etat.corbeille);
+      if (admin) { const n = recettes.filter(r => r.hidden).length; $("btn-corbeille").textContent = "🗑 Corbeille" + (n ? " (" + n + ")" : ""); }
     }
     $("btn-admin").onclick = () => {
       if (admin) { admin = false; token = null; try { localStorage.removeItem("rb_token"); } catch (e) {} etat.corbeille = false; rafraichir(); toast("Déconnecté"); return; }
@@ -592,7 +597,22 @@
     $("tri").addEventListener("change", e => { etat.tri = e.target.value; afficher(); });
     $("aliment").addEventListener("input", e => { etat.aliment = e.target.value; afficher(); });
     $("btn-fav").onclick = () => { etat.fav = !etat.fav; afficher(); };
-    $("btn-corbeille").onclick = () => { etat.corbeille = !etat.corbeille; afficher(); };
+    $("btn-corbeille").onclick = () => { etat.corbeille = !etat.corbeille; afficher(); renderAdmin(); };
+    $("btn-vider").onclick = async () => {
+      const liste = recettes.filter(r => r.hidden);
+      if (!liste.length || !confirm("Supprimer définitivement les " + liste.length + " recette(s) de la corbeille ? Impossible d'annuler.")) return;
+      try {
+        for (const r of liste) {
+          for (const k of ["txt", "img"]) {
+            const f = (fichiersInfo[r.id] || {})[k]; if (!f) continue;
+            const rep = await fetch("https://api.github.com/repos/" + DEPOT + "/contents/" + f.path, { method: "DELETE", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify({ message: "Nettoyage des recettes", sha: f.sha }) });
+            if (!rep.ok) throw new Error("suppression refusée (" + rep.status + ")");
+          }
+          delete meta.r[r.id]; meta.ordre = meta.ordre.filter(x => x !== r.id);
+        }
+        await sauvegarderMeta(); toast("Corbeille vidée"); etat.corbeille = false; await charger();
+      } catch (e) { toast("Erreur : " + e.message); await charger(); }
+    };
     $("fermer").addEventListener("click", () => $("detail").close());
     for (const id of ["detail", "edition", "connexion"]) $(id).addEventListener("click", e => { if (e.target.id === id) e.target.close(); });
 
